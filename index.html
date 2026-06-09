@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Typing Quest - Retro 8-Bit Typing Game</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Retro 8-bit Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Lexend:wght@400;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome for cute icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Tone.js for dynamic 8-bit synth sound generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+        body {
+            font-family: 'Lexend', sans-serif;
+            background-color: #1a1a2e;
+            image-rendering: pixelated;
+        }
+        .pixel-font {
+            font-family: 'Press Start 2P', monospace;
+            line-height: 1.5;
+        }
+        .pixel-border {
+            border: 4px solid #fff;
+            box-shadow: 
+                0 -4px 0 -2px #000, 0 4px 0 -2px #000,
+                -4px 0 0 -2px #000, 4px 0 0 -2px #000,
+                inset 0 0 0 4px #000;
+        }
+        .pixel-btn {
+            position: relative;
+            border: 4px solid #000;
+            background-color: #4e4eec;
+            color: #fff;
+            image-rendering: pixelated;
+            box-shadow: -4px 4px 0px 0px #000000;
+            transition: all 0.1s ease;
+        }
+        .pixel-btn:active {
+            transform: translate(-2px, 2px);
+            box-shadow: -2px 2px 0px 0px #000000;
+        }
+        .pixel-btn-green {
+            background-color: #22c55e;
+        }
+        .pixel-btn-red {
+            background-color: #ef4444;
+        }
+        .pixel-btn-yellow {
+            background-color: #eab308;
+            color: #000;
+        }
+        /* Standard 16:9 Aspect Ratio Container */
+        .game-wrapper {
+            aspect-ratio: 16 / 9;
+            width: 100%;
+            max-width: 1024px;
+        }
+        /* Custom retro scanline overlay */
+        .scanlines {
+            position: relative;
+            overflow: hidden;
+        }
+        .scanlines::before {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            z-index: 10;
+            background-size: 100% 4px, 6px 100%;
+            pointer-events: none;
+        }
+        /* Custom typing display coloring */
+        .letter-correct {
+            color: #22c55e;
+            text-shadow: 0 0 5px #22c55e;
+        }
+        .letter-incorrect {
+            color: #ef4444;
+            background-color: rgba(239, 68, 68, 0.3);
+            text-shadow: 0 0 5px #ef4444;
+            border-bottom: 2px solid #ef4444;
+            animation: shake 0.1s ease-in-out infinite;
+        }
+        .letter-current {
+            background-color: rgba(234, 179, 8, 0.3);
+            border-bottom: 4px solid #eab308;
+            color: #eab308;
+            animation: pulse-border 1s infinite alternate;
+        }
+        @keyframes pulse-border {
+            0% { border-color: #eab308; }
+            100% { border-color: #fff; }
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-1px); }
+            75% { transform: translateX(1px); }
+        }
+        /* Hide scrollbar for clean UI */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #111827;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4b5563;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen p-2 md:p-6 text-white overflow-y-auto">
+
+    <!-- Main outer retro game cabinet layout -->
+    <div class="w-full flex flex-col items-center">
+        <!-- Banner/Header Info -->
+        <div class="w-full max-w-[1024px] flex justify-between items-center mb-2 px-4 py-2 bg-slate-900 border-2 border-slate-700 rounded-lg">
+            <div class="flex items-center space-x-3">
+                <span class="pixel-font text-[10px] md:text-sm text-yellow-400"><i class="fa-solid fa-gamepad mr-2"></i>GRADE 3-5 QUEST</span>
+            </div>
+            <!-- Audio Toggles -->
+            <div class="flex items-center space-x-4">
+                <button id="musicToggleBtn" onclick="toggleMusic()" class="text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1 rounded border border-slate-600 flex items-center gap-1">
+                    <i id="musicIcon" class="fa-solid fa-music text-red-400"></i>
+                    <span class="hidden sm:inline">Music: Off</span>
+                </button>
+                <button id="sfxToggleBtn" onclick="toggleSFX()" class="text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1 rounded border border-slate-600 flex items-center gap-1">
+                    <i id="sfxIcon" class="fa-solid fa-volume-high text-green-400"></i>
+                    <span class="hidden sm:inline">SFX: On</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 16:9 Interactive Screen Viewport -->
+        <div class="game-wrapper scanlines bg-black pixel-border relative flex flex-col justify-between overflow-hidden rounded-md p-3 md:p-6">
+            
+            <!-- Dynamic Background elements (stars/space theme) -->
+            <div class="absolute inset-0 bg-gradient-to-b from-indigo-950 via-slate-950 to-purple-950 opacity-90 z-0 pointer-events-none"></div>
+
+            <div id="startScreen" class="relative z-10 flex flex-col justify-between h-full text-center">
+                <div>
+                    <h1 class="pixel-font text-xl md:text-4xl text-yellow-400 drop-shadow-[0_4px_0_#b45309] tracking-widest mt-2 md:mt-4">
+                        TYPING QUEST
+                    </h1>
+                    <p class="text-xs md:text-sm mt-1 text-purple-300 font-semibold uppercase tracking-wider">Level Up Your Typing Skills!</p>
+                </div>
+
+                <!-- Choose your Character -->
+                <div class="my-auto">
+                    <p class="pixel-font text-[10px] md:text-xs text-green-400 mb-2">1. CHOOSE YOUR HERO:</p>
+                    <div class="grid grid-cols-4 gap-2 max-w-lg mx-auto px-4">
+                        <!-- Hero 1: Knight -->
+                        <div onclick="selectHero('knight')" id="hero-knight" class="hero-card border-2 border-yellow-400 bg-slate-800 p-2 rounded cursor-pointer hover:bg-slate-700 transition transform hover:-translate-y-1">
+                            <div class="text-xl md:text-3xl">⚔️</div>
+                            <span class="pixel-font text-[8px] md:text-[10px] block mt-1">KNIGHT</span>
+                        </div>
+                        <!-- Hero 2: Wizard -->
+                        <div onclick="selectHero('wizard')" id="hero-wizard" class="hero-card border-2 border-transparent bg-slate-800 p-2 rounded cursor-pointer hover:bg-slate-700 transition transform hover:-translate-y-1">
+                            <div class="text-xl md:text-3xl">🧙‍♂️</div>
+                            <span class="pixel-font text-[8px] md:text-[10px] block mt-1">WIZARD</span>
+                        </div>
+                        <!-- Hero 3: Astronaut -->
+                        <div onclick="selectHero('astro')" id="hero-astro" class="hero-card border-2 border-transparent bg-slate-800 p-2 rounded cursor-pointer hover:bg-slate-700 transition transform hover:-translate-y-1">
+                            <div class="text-xl md:text-3xl">👨‍🚀</div>
+                            <span class="pixel-font text-[8px] md:text-[10px] block mt-1">ASTRO</span>
+                        </div>
+                        <!-- Hero 4: Dino -->
+                        <div onclick="selectHero('dino')" id="hero-dino" class="hero-card border-2 border-transparent bg-slate-800 p-2 rounded cursor-pointer hover:bg-slate-700 transition transform hover:-translate-y-1">
+                            <div class="text-xl md:text-3xl">🦖</div>
+                            <span class="pixel-font text-[8px] md:text-[10px] block mt-1">DINO</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Level / Time Selection -->
+                <div class="mb-2">
+                    <p class="pixel-font text-[10px] md:text-xs text-cyan-400 mb-2">2. SELECT DIFFICULTY LEVEL:</p>
+                    <div class="flex justify-center space-x-3 md:space-x-6">
+                        <!-- Easy: 10 Seconds -->
+                        <button onclick="selectLevel(10)" id="lvl-10" class="level-btn pixel-btn pixel-btn-green px-3 py-1 md:px-5 md:py-2 rounded text-[10px] md:text-xs flex flex-col items-center">
+                            <span>EASY</span>
+                            <span class="font-bold mt-1 text-[8px] md:text-[10px]">10 SECONDS</span>
+                        </button>
+                        <!-- Average: 30 Seconds -->
+                        <button onclick="selectLevel(30)" id="lvl-30" class="level-btn pixel-btn px-3 py-1 md:px-5 md:py-2 rounded text-[10px] md:text-xs flex flex-col items-center opacity-70">
+                            <span>AVERAGE</span>
+                            <span class="font-bold mt-1 text-[8px] md:text-[10px]">30 SECONDS</span>
+                        </button>
+                        <!-- Difficult: 60 Seconds -->
+                        <button onclick="selectLevel(60)" id="lvl-60" class="level-btn pixel-btn pixel-btn-red px-3 py-1 md:px-5 md:py-2 rounded text-[10px] md:text-xs flex flex-col items-center opacity-70">
+                            <span>DIFFICULT</span>
+                            <span class="font-bold mt-1 text-[8px] md:text-[10px]">60 SECONDS</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Play/Start Game Action -->
+                <div class="mb-2">
+                    <button onclick="startGame()" class="pixel-btn pixel-btn-yellow px-8 py-3 rounded text-sm md:text-lg font-bold animate-pulse">
+                        START QUEST! <i class="fa-solid fa-play ml-2"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div id="gameplayScreen" class="relative z-10 flex flex-col justify-between h-full hidden">
+                
+                <!-- Game Header Info & Live Stats -->
+                <div class="flex justify-between items-center bg-slate-900/90 border-2 border-slate-700 p-2 rounded-lg text-white">
+                    <div class="flex items-center space-x-3">
+                        <span id="gameHeroIcon" class="text-2xl">⚔️</span>
+                        <div>
+                            <div class="pixel-font text-[8px] md:text-[10px] text-yellow-400">HERO LEVEL <span id="playerLvl">1</span></div>
+                            <div class="w-20 md:w-32 bg-slate-700 h-2 rounded overflow-hidden mt-1">
+                                <div id="xpBar" class="bg-yellow-400 h-full w-10"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Middle Live Stats -->
+                    <div class="flex space-x-4 md:space-x-8">
+                        <div class="text-center">
+                            <span class="block text-[8px] md:text-[10px] text-slate-400 font-semibold uppercase">WPM</span>
+                            <span id="liveWpm" class="pixel-font text-xs md:text-base text-green-400">0</span>
+                        </div>
+                        <div class="text-center">
+                            <span class="block text-[8px] md:text-[10px] text-slate-400 font-semibold uppercase">Accuracy</span>
+                            <span id="liveAccuracy" class="pixel-font text-xs md:text-base text-cyan-400">100%</span>
+                        </div>
+                        <div class="text-center">
+                            <span class="block text-[8px] md:text-[10px] text-slate-400 font-semibold uppercase">Streak</span>
+                            <span id="liveStreak" class="pixel-font text-xs md:text-base text-yellow-500">🔥 0</span>
+                        </div>
+                    </div>
+
+                    <!-- Timer Bar Count -->
+                    <div class="text-right">
+                        <span class="pixel-font text-[9px] md:text-xs text-red-400 block" id="timeDisplay">TIME: 30s</span>
+                        <div class="w-16 md:w-24 bg-slate-700 h-2 rounded overflow-hidden mt-1">
+                            <div id="timeLeftBar" class="bg-red-500 h-full w-full transition-all duration-1000"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 8-Bit Interactive Quest Visuals (The Hero battling pixel slimes as you type!) -->
+                <div class="relative w-full h-24 md:h-36 bg-slate-950/80 rounded border border-slate-700 my-2 overflow-hidden">
+                    <canvas id="questCanvas" class="w-full h-full block"></canvas>
+                    <!-- Small game status splash texts (combo notices, leveling up, correct hits) -->
+                    <div id="combofloater" class="absolute top-2 left-1/2 transform -translate-x-1/2 pixel-font text-[9px] md:text-xs text-yellow-300 pointer-events-none hidden bg-black/70 px-2 py-1 rounded">COMBO X5!</div>
+                </div>
+
+                <!-- The Interactive Typing Field -->
+                <div class="bg-slate-900/90 border-2 border-slate-700 rounded-lg p-2 md:p-4 flex flex-col justify-between flex-grow">
+                    <!-- Word text display container with responsive letters -->
+                    <div id="wordDisplayContainer" class="flex flex-wrap justify-center items-center text-center select-none overflow-y-auto max-h-24 md:max-h-32 p-1 md:p-3 bg-slate-950/50 border border-slate-800 rounded mb-2">
+                        <!-- Dynamic span letters go here -->
+                        <span class="pixel-font text-xs md:text-sm text-slate-400 animate-pulse">Loading amazing typing quests...</span>
+                    </div>
+
+                    <!-- Hidden actual input to receive keystrokes nicely on all devices, coupled with a stylized dummy presentation -->
+                    <div class="relative">
+                        <input type="text" id="typeInput" class="opacity-0 absolute inset-0 w-full h-full cursor-pointer z-20" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Tap here to type">
+                        
+                        <!-- Visual Input Prompt Interface -->
+                        <div id="inputBoxVisual" class="w-full bg-slate-950 border-2 border-slate-600 rounded-lg py-1 md:py-2 text-center text-sm md:text-lg pixel-font flex justify-center items-center cursor-pointer hover:border-yellow-400 transition-colors">
+                            <span id="visualPlaceholder" class="text-slate-500 text-[10px] md:text-sm animate-pulse flex items-center gap-2">
+                                <i class="fa-solid fa-keyboard"></i> CLICK HERE TO TYPE & CHASE MONSTERS!
+                            </span>
+                            <span id="visualInputText" class="text-yellow-400 tracking-wider"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Touch Device Virtual Keyboard Toggle Button (Responsive friendly) -->
+                <div class="mt-2 flex justify-between items-center text-xs text-slate-400">
+                    <span class="flex items-center gap-1 text-[10px] md:text-[11px]"><i class="fa-solid fa-info-circle text-cyan-400"></i> Press Space or Space/Enter to advance.</span>
+                    <button onclick="toggleOnScreenKeyboard()" class="bg-indigo-900/80 hover:bg-indigo-800 px-3 py-1 rounded border border-indigo-700 text-[10px] md:text-xs flex items-center gap-1 transition">
+                        <i class="fa-regular fa-keyboard"></i> <span>Toggle Screen Keyboard</span>
+                    </button>
+                </div>
+
+                <!-- Dynamic Virtual Keyboard for Tablets and Touch Devices -->
+                <div id="virtualKeyboard" class="hidden grid grid-cols-10 gap-1 bg-slate-900 border-2 border-slate-700 p-2 rounded-lg mt-2 select-none">
+                    <!-- Dynamic Virtual Keys are rendered via JS -->
+                </div>
+            </div>
+
+            <div id="resultsScreen" class="relative z-10 flex flex-col justify-between h-full text-center hidden">
+                <div>
+                    <h2 class="pixel-font text-lg md:text-3xl text-yellow-400 tracking-wider animate-bounce mt-2">
+                        QUEST COMPLETED!
+                    </h2>
+                    <p id="gradeBanner" class="text-xs md:text-sm mt-1 text-green-400 uppercase tracking-widest font-bold">Awesome Effort!</p>
+                </div>
+
+                <!-- Display Stats Cards -->
+                <div class="grid grid-cols-3 gap-2 md:gap-4 my-auto max-w-2xl mx-auto w-full px-4">
+                    <div class="bg-slate-900/90 border-2 border-slate-700 p-2 md:p-4 rounded-lg">
+                        <span class="block text-[8px] md:text-[10px] text-slate-400 uppercase">Speed</span>
+                        <div id="finalWpm" class="pixel-font text-sm md:text-2xl text-green-400 mt-1">0</div>
+                        <span class="text-[8px] md:text-[10px] text-green-500/80">WPM</span>
+                    </div>
+
+                    <div class="bg-slate-900/90 border-2 border-slate-700 p-2 md:p-4 rounded-lg relative overflow-hidden">
+                        <span class="block text-[8px] md:text-[10px] text-slate-400 uppercase">Rank Award</span>
+                        <div id="rankChar" class="pixel-font text-lg md:text-3xl text-yellow-400 mt-1">A</div>
+                        <span id="rankTitle" class="text-[7px] md:text-[9px] text-yellow-500 block leading-tight">Master Typer</span>
+                    </div>
+
+                    <div class="bg-slate-900/90 border-2 border-slate-700 p-2 md:p-4 rounded-lg">
+                        <span class="block text-[8px] md:text-[10px] text-slate-400 uppercase">Accuracy</span>
+                        <div id="finalAccuracy" class="pixel-font text-sm md:text-2xl text-cyan-400 mt-1">100%</div>
+                        <span id="wrongKeyStats" class="text-[8px] md:text-[10px] text-cyan-500/80">0 Errors</span>
+                    </div>
+                </div>
+
+                <!-- Detailed performance progress & XP -->
+                <div class="bg-slate-900/60 max-w-md mx-auto p-2 rounded border border-slate-800 text-xs text-slate-300">
+                    <p class="mb-1"><span class="text-yellow-400 font-bold">XP Gained:</span> +<span id="xpGained">150</span> XP</p>
+                    <p><span class="text-cyan-400 font-bold">High Score (WPM):</span> <span id="highScoreWpm">0</span></p>
+                </div>
+
+                <!-- Return controls -->
+                <div class="flex justify-center space-x-4 mb-2">
+                    <button onclick="returnToStart()" class="pixel-btn pixel-btn-yellow px-5 py-2 rounded text-[10px] md:text-xs font-bold uppercase">
+                        <i class="fa-solid fa-rotate-left mr-1"></i> Play Again
+                    </button>
+                    <button onclick="shareScore()" id="copyScoreBtn" class="pixel-btn px-5 py-2 rounded text-[10px] md:text-xs font-bold uppercase">
+                        <i class="fa-solid fa-copy mr-1"></i> Copy Score
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // Kid-friendly word lists designed carefully for Grade 3 to 5
+        const WORDS_POOL = {
+            10: [
+                "cat", "dog", "sun", "moon", "star", "tree", "fish", "frog", "bird", "blue", 
+                "red", "pink", "jump", "run", "fast", "slow", "happy", "kind", "play", "game"
+            ],
+            30: [
+                "The blue fish swims fast in the wide ocean.",
+                "Happy monkeys love to swing on green jungle trees.",
+                "A tiny bright space rocket sailed past the moon.",
+                "The yellow duck walked slowly to the cool pond.",
+                "We must practice our typing skills every single day.",
+                "A magical friendly dragon guarded the gold treasure."
+            ],
+            60: [
+                "Long ago, a brave knight set off on a fantastic adventure. With a mighty shield and a sword made of stars, the knight walked through thick green forests, hot deserts, and deep canyons to find a magical golden keyboard that could restore peace and fun to the whole pixel kingdom.",
+                "Deep down in the sparkling ocean, beautiful creatures swim around coral reefs. Bright pink starfish, slow turtles, and cute blue dolphins love to play games tag together. If you type accurately, they will cheer you on and help you finish your underwater typing quest!"
+            ]
+        };
+
+        // Characters visual avatars and values
+        const AVATARS = {
+            knight: { emoji: "⚔️", color: "#f87171" },
+            wizard: { emoji: "🧙‍♂️", color: "#60a5fa" },
+            astro: { emoji: "👨‍🚀", color: "#38bdf8" },
+            dino: { emoji: "🦖", color: "#4ade80" }
+        };
+
+        // Game state
+        let currentLevel = 30; // default (average)
+        let selectedHeroId = 'knight';
+        let isPlaying = false;
+        let timeRemaining = 30;
+        let timerInterval = null;
+        let originalLevelTime = 30;
+        
+        // Typing tracking
+        let activeText = "";
+        let currentIndex = 0;
+        let totalTypedCount = 0;
+        let correctTypedCount = 0;
+        let errorCount = 0;
+        let currentStreak = 0;
+        let maxStreak = 0;
+
+        // Player Level and XP (persisted in LocalStorage)
+        let playerLevel = parseInt(localStorage.getItem('typing_quest_level')) || 1;
+        let playerXP = parseInt(localStorage.getItem('typing_quest_xp')) || 0;
+        let highScore = parseInt(localStorage.getItem(`typing_quest_high_${currentLevel}`)) || 0;
+
+        // Sound Engine options (Tone.js)
+        let musicEnabled = false;
+        let sfxEnabled = true;
+        let synth = null;
+        let polySynth = null;
+        let bgLoopActive = false;
+        let bgSequence = null;
+
+        // Side-scroller canvas animation variables
+        let canvas = null;
+        let ctx = null;
+        let animationFrameId = null;
+        let heroX = 40;
+        let heroY = 60;
+        let heroFrame = 0;
+        let enemyX = 300;
+        let enemyType = "slime"; // slime, ghost, dragon
+        let enemyDefeated = false;
+        let hitFeedbackTicks = 0;
+        let bgOffset = 0;
+
+        function initSound() {
+            if (synth) return; // already initialized
+            
+            // Retro synth for quick ticks and sound cues
+            synth = new Tone.MonoSynth({
+                oscillator: { type: "square" },
+                envelope: { attack: 0.005, decay: 0.1, sustain: 0, release: 0.1 }
+            }).toDestination();
+
+            // PolySynth for victory/achievement sounds
+            polySynth = new Tone.PolySynth(Tone.Synth, {
+                oscillator: { type: "triangle" },
+                envelope: { attack: 0.01, decay: 0.15, sustain: 0.2, release: 0.2 }
+            }).toDestination();
+        }
+
+        // Custom audio sound effects
+        function playCorrectSound() {
+            if (!sfxEnabled) return;
+            initSound();
+            try {
+                // Short retro high tick
+                const pitch = 500 + (currentStreak * 15); // Dynamic pitching up sound on streak
+                synth.triggerAttackRelease(pitch, "0.04");
+            } catch (e) { console.log(e); }
+        }
+
+        function playIncorrectSound() {
+            if (!sfxEnabled) return;
+            initSound();
+            try {
+                // Low buzz error
+                synth.triggerAttackRelease("G2", "0.15");
+            } catch (e) { console.log(e); }
+        }
+
+        function playLevelCompleteSound() {
+            if (!sfxEnabled) return;
+            initSound();
+            try {
+                // Arpeggio fanfare
+                const now = Tone.now();
+                polySynth.triggerAttackRelease(["C4", "E4", "G4", "C5"], "0.3", now);
+                polySynth.triggerAttackRelease(["E4", "G4", "B4", "E5"], "0.3", now + 0.25);
+                polySynth.triggerAttackRelease(["G4", "B4", "D5", "G5"], "0.6", now + 0.5);
+            } catch (e) { console.log(e); }
+        }
+
+        function startBGM() {
+            if (!musicEnabled) return;
+            initSound();
+            try {
+                // Bouncy 8-bit retro loop
+                if (bgSequence) {
+                    bgSequence.start();
+                    Tone.Transport.start();
+                    return;
+                }
+                const synthMelody = new Tone.Synth({
+                    oscillator: { type: "triangle" },
+                    envelope: { attack: 0.05, decay: 0.1, sustain: 0.3, release: 0.2 }
+                }).toDestination();
+                synthMelody.volume.value = -12; // lower volume for ambient background
+
+                // Upbeat cheerful kids tune
+                const notes = [
+                    "C4", "E4", "G4", "E4", "F4", "A4", "C5", "A4",
+                    "G4", "B4", "D5", "B4", "C5", "G4", "E4", "C4"
+                ];
+                let index = 0;
+                bgSequence = new Tone.Loop(time => {
+                    const note = notes[index % notes.length];
+                    synthMelody.triggerAttackRelease(note, "8n", time);
+                    index++;
+                }, "8n");
+                
+                bgSequence.start();
+                Tone.Transport.start();
+            } catch(e) { console.log(e); }
+        }
+
+        function stopBGM() {
+            if (bgSequence) {
+                bgSequence.stop();
+            }
+        }
+
+        function toggleMusic() {
+            musicEnabled = !musicEnabled;
+            const btn = document.getElementById("musicToggleBtn");
+            const icon = document.getElementById("musicIcon");
+            if (musicEnabled) {
+                btn.classList.add("bg-indigo-900");
+                icon.className = "fa-solid fa-music text-green-400";
+                btn.querySelector("span").textContent = "Music: On";
+                startBGM();
+            } else {
+                btn.classList.remove("bg-indigo-900");
+                icon.className = "fa-solid fa-music text-red-400";
+                btn.querySelector("span").textContent = "Music: Off";
+                stopBGM();
+            }
+        }
+
+        function toggleSFX() {
+            sfxEnabled = !sfxEnabled;
+            const btn = document.getElementById("sfxToggleBtn");
+            const icon = document.getElementById("sfxIcon");
+            if (sfxEnabled) {
+                btn.classList.remove("opacity-60");
+                icon.className = "fa-solid fa-volume-high text-green-400";
+                btn.querySelector("span").textContent = "SFX: On";
+            } else {
+                btn.classList.add("opacity-60");
+                icon.className = "fa-solid fa-volume-xmark text-red-400";
+                btn.querySelector("span").textContent = "SFX: Off";
+            }
+        }
+
+        function selectHero(heroId) {
+            selectedHeroId = heroId;
+            document.querySelectorAll(".hero-card").forEach(el => el.classList.remove("border-yellow-400"));
+            document.getElementById(`hero-${heroId}`).classList.add("border-yellow-400");
+            
+            // Sync icons instantly
+            document.getElementById("gameHeroIcon").innerHTML = AVATARS[heroId].emoji;
+        }
+
+        function selectLevel(secs) {
+            currentLevel = secs;
+            document.querySelectorAll(".level-btn").forEach(btn => btn.classList.add("opacity-70"));
+            document.getElementById(`lvl-${secs}`).classList.remove("opacity-70");
+            highScore = parseInt(localStorage.getItem(`typing_quest_high_${currentLevel}`)) || 0;
+        }
+
+        // Generate word/phrase sequence suited for students
+        function generateSentence() {
+            const list = WORDS_POOL[currentLevel];
+            if (currentLevel === 10) {
+                // Return a sequence of simple random words
+                const temp = [];
+                for (let i = 0; i < 6; i++) {
+                    temp.push(list[Math.floor(Math.random() * list.length)]);
+                }
+                return temp.join(" ");
+            } else {
+                // Return one large predefined sentence or paragraph
+                return list[Math.floor(Math.random() * list.length)];
+            }
+        }
+
+        function renderSentence() {
+            const container = document.getElementById("wordDisplayContainer");
+            container.innerHTML = "";
+            
+            // Split by letters to style precisely
+            for (let i = 0; i < activeText.length; i++) {
+                const charSpan = document.createElement("span");
+                charSpan.classList.add("pixel-font", "text-sm", "md:text-base", "px-[1px]");
+                
+                if (activeText[i] === " ") {
+                    charSpan.innerHTML = "&nbsp;"; // space formatting
+                } else {
+                    charSpan.innerText = activeText[i];
+                }
+                
+                // Active highlighting
+                if (i < currentIndex) {
+                    charSpan.classList.add("letter-correct");
+                } else if (i === currentIndex) {
+                    charSpan.classList.add("letter-current");
+                } else {
+                    charSpan.classList.add("text-slate-400");
+                }
+                container.appendChild(charSpan);
+            }
+        }
+
+        function startGame() {
+            // Hide start screen, show typing quest
+            document.getElementById("startScreen").classList.add("hidden");
+            document.getElementById("gameplayScreen").classList.remove("hidden");
+            document.getElementById("resultsScreen").classList.add("hidden");
+            
+            // Initialize game parameters
+            isPlaying = true;
+            activeText = generateSentence();
+            currentIndex = 0;
+            totalTypedCount = 0;
+            correctTypedCount = 0;
+            errorCount = 0;
+            currentStreak = 0;
+            maxStreak = 0;
+            originalLevelTime = currentLevel;
+            timeRemaining = currentLevel;
+
+            // Load saved player levels
+            playerLevel = parseInt(localStorage.getItem('typing_quest_level')) || 1;
+            playerXP = parseInt(localStorage.getItem('typing_quest_xp')) || 0;
+            updateXPBar();
+
+            // Set up visuals
+            document.getElementById("typeInput").value = "";
+            document.getElementById("visualInputText").innerText = "";
+            document.getElementById("visualPlaceholder").classList.remove("hidden");
+            
+            renderSentence();
+            initCanvas();
+            startAnimation();
+            startTimer();
+
+            // Auto focus for immediate gameplay on desktop/laptop
+            setTimeout(() => {
+                const input = document.getElementById("typeInput");
+                input.focus();
+                // trigger a keyboard visualizer mapping helper
+                renderVirtualKeyboard();
+            }, 100);
+
+            // Play background music if active
+            if (musicEnabled) {
+                startBGM();
+            }
+        }
+
+        function startTimer() {
+            document.getElementById("timeDisplay").textContent = `TIME: ${timeRemaining}s`;
+            const bar = document.getElementById("timeLeftBar");
+            bar.style.width = "100%";
+
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                if (!isPlaying) return;
+                timeRemaining--;
+                document.getElementById("timeDisplay").textContent = `TIME: ${timeRemaining}s`;
+                
+                // Progress bar countdown
+                const percentage = (timeRemaining / originalLevelTime) * 100;
+                bar.style.style = `width: ${percentage}%`;
+                bar.style.width = `${percentage}%`;
+
+                // Calculate metrics in real time
+                calculateLiveMetrics();
+
+                if (timeRemaining <= 0) {
+                    endGame();
+                }
+            }, 1000);
+        }
+
+        function calculateLiveMetrics() {
+            const timeElapsed = (originalLevelTime - timeRemaining) / 60; // in minutes
+            if (timeElapsed <= 0) return;
+            
+            // Standard WPM formula: (correct characters typed / 5) / time elapsed in minutes
+            const liveWpm = Math.round((correctTypedCount / 5) / timeElapsed);
+            document.getElementById("liveWpm").textContent = isNaN(liveWpm) ? 0 : liveWpm;
+
+            // Accuracy: correct typed vs total typed
+            const accuracy = totalTypedCount > 0 ? Math.round((correctTypedCount / totalTypedCount) * 100) : 100;
+            document.getElementById("liveAccuracy").textContent = `${accuracy}%`;
+            document.getElementById("liveStreak").textContent = `🔥 ${currentStreak}`;
+        }
+
+        const typeInput = document.getElementById("typeInput");
+        typeInput.addEventListener("input", handleTyping);
+
+        function handleTyping(e) {
+            if (!isPlaying) return;
+            
+            const val = typeInput.value;
+            if (val === "") return;
+
+            // Detect current character targeted
+            const targetChar = activeText[currentIndex];
+            const typedChar = val[val.length - 1]; // get latest typed char
+
+            totalTypedCount++;
+
+            // Highlight simulated screen key tapped
+            highlightVirtualKey(typedChar);
+
+            if (typedChar === targetChar) {
+                // CORRECT CHARACTER TYPED
+                currentIndex++;
+                correctTypedCount++;
+                currentStreak++;
+                if (currentStreak > maxStreak) maxStreak = currentStreak;
+
+                playCorrectSound();
+                triggerHeroStrike();
+
+                // Clear input box periodically or after space to look like an arcade game
+                if (typedChar === " " || currentIndex % 10 === 0) {
+                    typeInput.value = "";
+                }
+
+                // Show visual matching sequence
+                document.getElementById("visualPlaceholder").classList.add("hidden");
+                document.getElementById("visualInputText").innerText = val;
+
+                // Combo Splash
+                if (currentStreak > 0 && currentStreak % 10 === 0) {
+                    showComboFloater(`COMBO x${currentStreak}!`);
+                }
+
+                // CHECK IF SENTENCE FINISHED
+                if (currentIndex >= activeText.length) {
+                    // Instantly generate new sentence/phrase to keep going
+                    activeText = generateSentence();
+                    currentIndex = 0;
+                    typeInput.value = "";
+                    document.getElementById("visualInputText").innerText = "";
+                    spawnNewEnemy();
+                }
+            } else {
+                // INCORRECT CHARACTER TYPED
+                errorCount++;
+                currentStreak = 0; // break combo streak
+                playIncorrectSound();
+                triggerScreenShake();
+            }
+
+            // Re-render sentence highlights
+            renderSentence();
+            calculateLiveMetrics();
+        }
+
+        // Onscreen keyboard interaction helper
+        function handleVirtualKeyPress(key) {
+            if (!isPlaying) return;
+            const input = document.getElementById("typeInput");
+            
+            let valToSend = key;
+            if (key === "SPACE") valToSend = " ";
+            
+            // Append and trigger input events manually
+            input.value += valToSend;
+            
+            // Create event to mimic input typing action
+            const event = new Event('input', { bubbles: true });
+            input.dispatchEvent(event);
+        }
+
+        function initCanvas() {
+            canvas = document.getElementById("questCanvas");
+            ctx = canvas.getContext("2d");
+            
+            // Maintain dynamic sizing
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight;
+
+            heroX = 50;
+            heroY = canvas.height - 30;
+            enemyX = canvas.width - 60;
+            enemyDefeated = false;
+        }
+
+        function spawnNewEnemy() {
+            enemyX = canvas.width - 60;
+            enemyDefeated = false;
+            const types = ["slime", "ghost", "dragon"];
+            enemyType = types[Math.floor(Math.random() * types.length)];
+        }
+
+        function triggerHeroStrike() {
+            // Make hero leap/dash forward towards enemy location
+            heroX += 8;
+            hitFeedbackTicks = 5;
+
+            // Damage slime visually
+            if (heroX >= enemyX - 30) {
+                enemyDefeated = true;
+                showComboFloater("DEFEATED! 👾");
+                setTimeout(() => {
+                    spawnNewEnemy();
+                    heroX = 50; // reset run track
+                }, 600);
+            }
+        }
+
+        function triggerScreenShake() {
+            const canvasContainer = canvas.parentElement;
+            canvasContainer.classList.add("animate-bounce");
+            setTimeout(() => {
+                canvasContainer.classList.remove("animate-bounce");
+            }, 150);
+        }
+
+        function showComboFloater(txt) {
+            const floater = document.getElementById("combofloater");
+            floater.textContent = txt;
+            floater.classList.remove("hidden");
+            setTimeout(() => {
+                floater.classList.add("hidden");
+            }, 1000);
+        }
+
+        function startAnimation() {
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
+
+            function drawLoop() {
+                if (!isPlaying) return;
+                
+                // Clear and render backdrop
+                ctx.fillStyle = "#0c0f1d";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Draw parallax scrolling retro grid/floor
+                ctx.strokeStyle = "#1e1b4b";
+                ctx.lineWidth = 2;
+                bgOffset = (bgOffset - 1) % 40;
+                for (let x = bgOffset; x < canvas.width; x += 40) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, canvas.height - 15);
+                    ctx.lineTo(x, canvas.height);
+                    ctx.stroke();
+                }
+
+                // Draw solid retro ground path line
+                ctx.fillStyle = "#4338ca";
+                ctx.fillRect(0, canvas.height - 15, canvas.width, 15);
+                ctx.fillStyle = "#10b981"; // green turf border
+                ctx.fillRect(0, canvas.height - 18, canvas.width, 3);
+
+                // Update animation frames
+                heroFrame++;
+
+                // Draw Hero Character Emoji
+                const activeHeroObj = AVATARS[selectedHeroId] || AVATARS.knight;
+                ctx.font = "26px Arial";
+                ctx.textAlign = "center";
+                
+                // Bobbing jump effect while running
+                let bobbingY = 0;
+                if (heroFrame % 10 < 5) {
+                    bobbingY = -4;
+                }
+
+                // Draw action hit sparks if typed correctly
+                if (hitFeedbackTicks > 0) {
+                    ctx.fillStyle = "#fbbf24";
+                    ctx.beginPath();
+                    ctx.arc(heroX + 15, heroY - 10, 15, 0, Math.PI * 2);
+                    ctx.fill();
+                    hitFeedbackTicks--;
+                }
+
+                ctx.fillText(activeHeroObj.emoji, heroX, heroY + bobbingY);
+
+                // Draw Enemy Target Visual (Slime/Ghost/Dragon)
+                if (!enemyDefeated) {
+                    ctx.font = "24px Arial";
+                    let enemyEmoji = "👾";
+                    if (enemyType === "slime") enemyEmoji = "🟢";
+                    if (enemyType === "ghost") enemyEmoji = "👻";
+                    if (enemyType === "dragon") enemyEmoji = "🐲";
+
+                    // Side bounce movement for enemy
+                    let enemyBob = Math.sin(heroFrame * 0.1) * 3;
+                    ctx.fillText(enemyEmoji, enemyX, heroY + enemyBob);
+                } else {
+                    // Poof particle explosion
+                    ctx.font = "16px Arial";
+                    ctx.fillText("💥", enemyX, heroY - 5);
+                }
+
+                // Keep hero slowly sliding back to run line if not typing
+                if (heroX > 50 && heroFrame % 4 === 0) {
+                    heroX -= 1;
+                }
+
+                animationFrameId = requestAnimationFrame(drawLoop);
+            }
+
+            drawLoop();
+        }
+
+        function endGame() {
+            isPlaying = false;
+            clearInterval(timerInterval);
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
+            stopBGM();
+
+            // Setup Sound
+            playLevelCompleteSound();
+
+            // Calculate metrics final output
+            const totalMinutes = originalLevelTime / 60;
+            const finalWpmVal = Math.round((correctTypedCount / 5) / totalMinutes);
+            const accuracyVal = totalTypedCount > 0 ? Math.round((correctTypedCount / totalTypedCount) * 100) : 100;
+
+            // Generate Grades custom-made for youngsters
+            let grade = "D";
+            let gradeTitle = "Novice Typer";
+            let gradeBanner = "Keep Practicing! Super effort!";
+            
+            if (finalWpmVal >= 40 && accuracyVal >= 90) {
+                grade = "S";
+                gradeTitle = "Ultimate Space Grandmaster";
+                gradeBanner = "ASTRONOMICAL! You type like a professional!";
+            } else if (finalWpmVal >= 25 && accuracyVal >= 85) {
+                grade = "A";
+                gradeTitle = "Gold Knight Champion";
+                gradeBanner = "AMAZING! Your fingers are flying!";
+            } else if (finalWpmVal >= 15 && accuracyVal >= 80) {
+                grade = "B";
+                gradeTitle = "Super Wizard Apprentice";
+                gradeBanner = "GREAT JOB! You did exceptionally well!";
+            } else if (finalWpmVal >= 8) {
+                grade = "C";
+                gradeTitle = "Brave Junior Adventurer";
+                gradeBanner = "GOOD EFFORT! Let's try again to speed up!";
+            }
+
+            // High Score persistence
+            if (finalWpmVal > highScore) {
+                highScore = finalWpmVal;
+                localStorage.setItem(`typing_quest_high_${currentLevel}`, highScore);
+            }
+
+            // Calculate XP Gained: base proportional rewards
+            const xpEarned = Math.round((correctTypedCount * 2) + (finalWpmVal * 3));
+            playerXP += xpEarned;
+            
+            // Simple Leveling Up formula: every 500 XP = 1 Level Up
+            const oldLevel = playerLevel;
+            playerLevel = Math.floor(playerXP / 500) + 1;
+            
+            localStorage.setItem('typing_quest_level', playerLevel);
+            localStorage.setItem('typing_quest_xp', playerXP);
+
+            // Display components mapping
+            document.getElementById("finalWpm").textContent = finalWpmVal;
+            document.getElementById("finalAccuracy").textContent = `${accuracyVal}%`;
+            document.getElementById("wrongKeyStats").textContent = `${errorCount} Errors`;
+            document.getElementById("rankChar").textContent = grade;
+            document.getElementById("rankTitle").textContent = gradeTitle;
+            document.getElementById("gradeBanner").textContent = gradeBanner;
+            document.getElementById("xpGained").textContent = xpEarned;
+            document.getElementById("highScoreWpm").textContent = `${highScore} WPM`;
+
+            // Transition Screens View
+            document.getElementById("gameplayScreen").classList.add("hidden");
+            document.getElementById("resultsScreen").classList.remove("hidden");
+        }
+
+        function returnToStart() {
+            document.getElementById("startScreen").classList.remove("hidden");
+            document.getElementById("gameplayScreen").classList.add("hidden");
+            document.getElementById("resultsScreen").classList.add("hidden");
+            
+            // Re-sync UI state for the select screen
+            playerLevel = parseInt(localStorage.getItem('typing_quest_level')) || 1;
+        }
+
+        // Safe secure Copy to Clipboard helper
+        function shareScore() {
+            const wpm = document.getElementById("finalWpm").textContent;
+            const accuracy = document.getElementById("finalAccuracy").textContent;
+            const rank = document.getElementById("rankTitle").textContent;
+            const scoreText = `👾 TYPING QUEST: I scored ${wpm} WPM with ${accuracy} accuracy and unlocked ${rank}! Practice with me!`;
+            
+            const textarea = document.createElement("textarea");
+            textarea.value = scoreText;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+
+            const copyBtn = document.getElementById("copyScoreBtn");
+            const origText = copyBtn.innerHTML;
+            copyBtn.innerHTML = "<i class='fa-solid fa-check mr-1'></i> COPIED!";
+            setTimeout(() => {
+                copyBtn.innerHTML = origText;
+            }, 2000);
+        }
+
+        function updateXPBar() {
+            document.getElementById("playerLvl").textContent = playerLevel;
+            const xpInCurrentLvl = playerXP % 500;
+            const pct = Math.round((xpInCurrentLvl / 500) * 100);
+            document.getElementById("xpBar").style.width = `${pct}%`;
+        }
+
+        const KEYBOARD_ROWS = [
+            ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
+            ["A", "S", "D", "F", "G", "H", "J", "K", "L", ";"],
+            ["Z", "X", "C", "V", "B", "N", "M", ",", ".", "SPACE"]
+        ];
+
+        function renderVirtualKeyboard() {
+            const kbContainer = document.getElementById("virtualKeyboard");
+            kbContainer.innerHTML = "";
+            
+            KEYBOARD_ROWS.forEach(row => {
+                row.forEach(key => {
+                    const keyBtn = document.createElement("button");
+                    keyBtn.setAttribute("data-key", key);
+                    keyBtn.classList.add(
+                        "bg-slate-800", "hover:bg-indigo-900", "active:bg-yellow-500", "text-white", 
+                        "rounded", "py-2", "text-center", "pixel-font", "text-[8px]", "md:text-[10px]", 
+                        "border", "border-slate-700", "transition-colors"
+                    );
+                    
+                    if (key === "SPACE") {
+                        keyBtn.classList.add("col-span-2", "bg-indigo-950");
+                    }
+                    
+                    keyBtn.textContent = key;
+                    keyBtn.onclick = () => handleVirtualKeyPress(key);
+                    kbContainer.appendChild(keyBtn);
+                });
+            });
+        }
+
+        function toggleOnScreenKeyboard() {
+            const kb = document.getElementById("virtualKeyboard");
+            if (kb.classList.contains("hidden")) {
+                kb.classList.remove("hidden");
+                renderVirtualKeyboard();
+            } else {
+                kb.classList.add("hidden");
+            }
+        }
+
+        function highlightVirtualKey(char) {
+            let keyToFind = char.toUpperCase();
+            if (keyToFind === " ") keyToFind = "SPACE";
+
+            const keyBtn = document.querySelector(`button[data-key="${keyToFind}"]`);
+            if (keyBtn) {
+                keyBtn.classList.add("bg-yellow-400", "text-black");
+                setTimeout(() => {
+                    keyBtn.classList.remove("bg-yellow-400", "text-black");
+                }, 150);
+            }
+        }
+
+        // Initialize state defaults on initial window launch
+        window.onload = function() {
+            selectHero('knight');
+            selectLevel(30);
+        };
+    </script>
+</body>
+</html>
